@@ -25,7 +25,7 @@ Edit `stories.js` to add passages and questions. Question tuples contain skill, 
 
 1. Import this GitHub repository into Vercel. Use Framework Preset **Other**, Node.js **24.x**, and the repository root. `vercel.json` sets the build command and output folder.
 2. In the Vercel project’s Storage/Marketplace section, add **Upstash Redis** and connect it to the project. Pick a nearby database region. Use a durable Redis database, not a cache configured to evict data.
-3. Verify server-side environment variables `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are present. If the integration uses other variable names, map them to these names. Never put database credentials in frontend files or commit `.env.local`. Use separate databases for Preview and Production so test deployments cannot alter production results.
+3. Verify either server-side credential pair is present: `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`, or the Vercel Marketplace names `KV_REST_API_URL` / `KV_REST_API_TOKEN`. Both work without renaming. A `REDIS_URL` alone is a TCP connection string, so enable the REST credentials in the integration as well. Never put database credentials in frontend files or commit `.env.local`. Use separate databases for Preview and Production so test deployments cannot alter production results.
 4. Deploy or redeploy after connecting storage. In Grown-up corner, choose **Enable cloud saving**. The status must say **Saved to cloud** before relying on the backup.
 5. Use **Show family key** and store the key privately. On another device, open the same deployment, choose **Connect this device to an existing family**, and enter the key. Connecting replaces that device’s local profiles; it does not merge two different families.
 

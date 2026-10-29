@@ -1,4 +1,4 @@
-const { test, afterEach } = require('node:test');
+const { test, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const { randomUUID } = require('node:crypto');
 const handler = require('../api/progress');
@@ -7,10 +7,17 @@ const FamilySync = require('../cloud');
 const fetchOriginal = global.fetch;
 const urlOriginal = process.env.UPSTASH_REDIS_REST_URL;
 const tokenOriginal = process.env.UPSTASH_REDIS_REST_TOKEN;
+const kvUrlOriginal = process.env.KV_REST_API_URL;
+const kvTokenOriginal = process.env.KV_REST_API_TOKEN;
+beforeEach(() => {
+  for (const key of ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN', 'KV_REST_API_URL', 'KV_REST_API_TOKEN']) delete process.env[key];
+});
 afterEach(() => {
   global.fetch = fetchOriginal;
   if (urlOriginal === undefined) delete process.env.UPSTASH_REDIS_REST_URL; else process.env.UPSTASH_REDIS_REST_URL = urlOriginal;
   if (tokenOriginal === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN; else process.env.UPSTASH_REDIS_REST_TOKEN = tokenOriginal;
+  if (kvUrlOriginal === undefined) delete process.env.KV_REST_API_URL; else process.env.KV_REST_API_URL = kvUrlOriginal;
+  if (kvTokenOriginal === undefined) delete process.env.KV_REST_API_TOKEN; else process.env.KV_REST_API_TOKEN = kvTokenOriginal;
 });
 const blank = () => ({ names: ['Reader 1', 'Reader 2'], records: [[], []] });
 const result = () => ({ type: 'result', reader: 0, record: { uid: randomUUID(), id: stories[0].id, date: new Date().toISOString(), answers: stories[0].qs.map(q => ({ skill: q[0], first: true, attempts: 1, help: false })) } });
@@ -60,6 +67,17 @@ test('database failure and rate limiting never report success', async () => {
   const limited = await call(); assert.equal(limited.code, 429); assert.equal(limited.headers['Retry-After'], '60');
   global.fetch = async () => ({ ok: false });
   assert.equal((await call()).code, 503);
+});
+test('Vercel Marketplace credentials work without renaming or mixing pairs', async () => {
+  process.env.KV_REST_API_URL = 'https://marketplace.example';
+  process.env.KV_REST_API_TOKEN = 'marketplace-secret';
+  process.env.UPSTASH_REDIS_REST_URL = 'https://incomplete.example';
+  global.fetch = async (url, options) => {
+    assert.equal(url, 'https://marketplace.example');
+    assert.equal(options.headers.Authorization, 'Bearer marketplace-secret');
+    return { ok: true, json: async () => ({ result: [] }) };
+  };
+  assert.equal((await call()).code, 200);
 });
 function client() {
   const c = Object.create(FamilySync.prototype);

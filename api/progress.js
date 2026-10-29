@@ -63,7 +63,11 @@ async function handler(req, res) {
   }
   const match = /^Bearer ([0-9a-f]{64})$/.exec(req.headers.authorization || '');
   if (!match) return res.status(401).json({ error: 'A valid family key is required.' });
-  const url = process.env.UPSTASH_REDIS_REST_URL, token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  // Vercel's Upstash integration can expose the REST pair with KV_* names.
+  // Select a complete pair so credentials from different stores are never mixed.
+  const explicit = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = explicit ? process.env.UPSTASH_REDIS_REST_URL : process.env.KV_REST_API_URL;
+  const token = explicit ? process.env.UPSTASH_REDIS_REST_TOKEN : process.env.KV_REST_API_TOKEN;
   if (!url || !token) return res.status(503).json({ error: 'Cloud saving is not configured yet.' });
   let ops = [];
   if (req.method === 'POST') {
