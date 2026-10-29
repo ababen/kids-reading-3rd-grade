@@ -1,5 +1,10 @@
 /* Local-first family sync. The family key is a private read/write credential. */
 class FamilySync {
+  static normalize(data) {
+    data.readerIds ||= data.names.map((_, i) => i);
+    data.deletedReaders ||= [];
+    return data;
+  }
   constructor(initial, update) {
     this.update = update;
     this.status = 'Cloud saving is off. Progress is saved in this browser.';
@@ -7,6 +12,7 @@ class FamilySync {
     if (!this.state || !Array.isArray(this.state.pending) || !this.state.data) {
       this.state = { key: '', pending: [], data: initial };
     }
+    FamilySync.normalize(this.state.data);
     this.state.data.records.forEach(records => records.forEach(r => { r.uid ||= crypto.randomUUID(); }));
     this.busy = false;
     window.addEventListener('online', () => this.sync());
@@ -25,9 +31,24 @@ class FamilySync {
     }
   }
   apply(data, op) {
-    if (op.type === 'name') data.names[op.reader] = op.name;
-    if (op.type === 'result' && !data.records[op.reader].some(r => r.uid === op.record.uid)) data.records[op.reader].push(op.record);
-    if (op.type === 'reset') data.records[op.reader] = data.records[op.reader].filter(r => !op.ids.includes(r.uid));
+    FamilySync.normalize(data);
+    let index = data.readerIds.indexOf(op.reader);
+    if (op.type === 'delete-reader') {
+      if (!data.deletedReaders.includes(op.reader)) data.deletedReaders.push(op.reader);
+      if (index !== -1) {
+        data.readerIds.splice(index, 1); data.names.splice(index, 1); data.records.splice(index, 1);
+      }
+      return;
+    }
+    if (data.deletedReaders.includes(op.reader)) return;
+    if (op.type === 'add-reader' && index === -1) {
+      data.readerIds.push(op.reader); data.names.push(op.name); data.records.push([]);
+      return;
+    }
+    if (index === -1) return;
+    if (op.type === 'name') data.names[index] = op.name;
+    if (op.type === 'result' && !data.records[index].some(r => r.uid === op.record.uid)) data.records[index].push(op.record);
+    if (op.type === 'reset') data.records[index] = data.records[index].filter(r => !op.ids.includes(r.uid));
   }
   enqueue(op) {
     if (this.state.key) this.state.pending.push(op);
@@ -45,7 +66,7 @@ class FamilySync {
     if (!response.ok) throw Error(response.status === 503 ? 'Cloud saving is unavailable. Check the backend setup or try again later.' : 'Could not sync. Your changes will retry automatically.');
     const reply = await response.json();
     if (!reply.data || !Array.isArray(reply.data.names) || !Array.isArray(reply.data.records)) throw Error('Invalid cloud response.');
-    return reply.data;
+    return FamilySync.normalize(reply.data);
   }
   async sync() {
     if (!this.state.key || this.busy) return;
@@ -75,8 +96,10 @@ class FamilySync {
     if (this.state.key) return;
     const bytes = crypto.getRandomValues(new Uint8Array(32));
     this.state.key = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
-    this.state.pending = this.state.data.names.map((name, reader) => ({ type: 'name', reader, name }));
-    this.state.data.records.forEach((records, reader) => records.forEach(record => this.state.pending.push({ type: 'result', reader, record })));
+    const data = FamilySync.normalize(this.state.data);
+    this.state.pending = data.deletedReaders.map(reader => ({ type: 'delete-reader', reader }));
+    data.names.forEach((name, i) => this.state.pending.push({ type: typeof data.readerIds[i] === 'number' ? 'name' : 'add-reader', reader: data.readerIds[i], name }));
+    data.records.forEach((records, i) => records.forEach(record => this.state.pending.push({ type: 'result', reader: data.readerIds[i], record })));
     this.persist();
     this.sync();
   }
@@ -101,7 +124,7 @@ class FamilySync {
     if (node) node.textContent = this.status;
   }
   panel() {
-    return `<section class="paper"><h2>Save across devices</h2><p id="sync-status" role="status"></p>${this.state.key ? '<p>Keep your family key somewhere private. Anyone with it can read and change these two profiles. There is no email recovery.</p><button id="show-key">Show family key</button> <button id="sync-now">Sync now</button><input id="family-key" aria-label="Your private family key" readonly hidden style="width:100%;box-sizing:border-box;margin-top:12px;font:inherit">' : '<p>Enable cloud saving to back up these profiles and results.</p><button id="enable-sync">Enable cloud saving</button>'}<details style="margin-top:16px"><summary>Connect this device to an existing family</summary><p>This loads that family’s profiles in place of this device’s profiles. Download any local progress you want to keep first.</p><form id="connect-family"><label for="join-key">Family key from your other device</label><input id="join-key" type="password" autocomplete="off" spellcheck="false" minlength="64" maxlength="64" required style="width:100%;box-sizing:border-box;margin:12px 0;font:inherit"><button>Connect family</button></form></details></section>`;
+    return `<section class="paper"><h2>Save across devices</h2><p id="sync-status" role="status"></p>${this.state.key ? '<p>Keep your family key somewhere private. Anyone with it can read and change your family’s profiles. There is no email recovery.</p><button id="show-key">Show family key</button> <button id="sync-now">Sync now</button><input id="family-key" aria-label="Your private family key" readonly hidden style="width:100%;box-sizing:border-box;margin-top:12px;font:inherit">' : '<p>Enable cloud saving to back up these profiles and results.</p><button id="enable-sync">Enable cloud saving</button>'}<details style="margin-top:16px"><summary>Connect this device to an existing family</summary><p>This loads that family’s profiles in place of this device’s profiles. Download any local progress you want to keep first.</p><form id="connect-family"><label for="join-key">Family key from your other device</label><input id="join-key" type="password" autocomplete="off" spellcheck="false" minlength="64" maxlength="64" required style="width:100%;box-sizing:border-box;margin:12px 0;font:inherit"><button>Connect family</button></form></details></section>`;
   }
   bind(render) {
     this.notify();

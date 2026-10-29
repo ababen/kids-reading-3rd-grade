@@ -30,4 +30,48 @@ qs:[['Details','When did the bridge make a moaning sound?',['When it rained','Wh
 'Not every floating seed will become a plant. One may land on a sidewalk where it cannot take root. Another may reach soil with enough water and light. A dandelion makes many seeds, so some have a chance to land in a place where they can grow.'],
 qs:[['Details','What helps a dandelion seed float?',['A tuft of fine hairs','A hard shell','A pair of leaves'],0,0,'Fine hairs act like a tiny parachute.'],['Cause and effect','Why can landing far from the parent plant help?',['The seed no longer needs water','There may be more room to grow','The seed can become a bird'],1,1,'Less crowded spots may offer more space, light, and water.'],['Vocabulary','What does “compete” mean here?',['Help each other float','Sleep until spring','Try to use the same limited things'],2,1,'Nearby plants need the same light, water, and space.'],['Inference','Which seed has a better chance to grow?',['A seed on a dry sidewalk','A seed in soil with water and light','A seed inside a closed box'],1,2,'The last paragraph explains that soil, water, and light give a seed a place to grow.']],choice:'Choose a nature detective task.',options:['Sketch a flying seed','Invent a seed traveler'],endings:['Draw a dandelion seed in the breeze. Label the part that helps it float. Use a detail from the passage to explain your drawing.','Draw an imaginary seed that can travel. Give it a feature that helps it move, then explain how that feature works.']}
 ];
+// Built-in story generation works offline and never sends names to an AI service.
+stories.generate = function(names, theme = 'forest') {
+  const cast = names.map(name => String(name).trim()).filter(Boolean);
+  const team = cast.length < 2 ? (cast[0] || 'The explorer') : `${cast.slice(0, -1).join(', ')} and ${cast.at(-1)}`;
+  const lead = cast[0] || 'The explorer';
+  const settings = {
+    forest: { title: 'the glowing forest', icon: '🌳', theme: 'Fantasy',
+      paras: [
+        `${team} arrived at the forest gate with a map and a small lantern. A silver owl was waiting on a branch. “The fireflies need help finding their meadow,” the owl said. Two paths led into the trees. One was wide and dusty. The other was narrow, with tiny glowing dots along its edge.`,
+        `${lead} held the lantern close to the map. A dotted line marked the path to the meadow. The little lights beside the narrow path looked just like that line. The explorers followed the glowing dots slowly, leaving the flowers beside the path untouched. Soon they heard the gentle sound of a stream.`,
+        `Across the stream, tall grass surrounded a meadow full of flowers. The fireflies gathered above it, blinking like stars. ${team} placed the lantern on a flat stone to light the way home. The owl thanked the explorers for looking carefully at the clues. A little patience had helped everyone find the right place.`
+      ], detail: ['What did the explorers bring?', ['A map and a lantern', 'A red umbrella', 'A basket of cookies'], 0, 0, 'The first paragraph says they brought a map and a small lantern.'],
+      inference: ['Why did the explorers choose the narrow path?', ['It was the widest path', 'Its glowing dots matched the dotted line on the map', 'The owl carried them there'], 1, 1, 'The glowing dots look like the dotted line marking the way to the meadow.'],
+      sequence: ['What happened after the explorers crossed the stream?', ['They arrived at the forest gate', 'They packed a map', 'They found the meadow and the fireflies gathered'], 2, 2, 'Across the stream is the meadow, where the fireflies gather.'],
+      idea: 'Looking carefully at clues can help others', choices: ['Make a tiny bridge', 'Draw a firefly map'], endings: [`${team} used fallen twigs to plan a little bridge. What would make it safe for the next explorer? Draw your idea.`, `${team} drew the stream, the narrow path, and the meadow. What symbols would help someone follow the map?`] },
+    space: { title: 'the space garden', icon: '🚀', theme: 'Fantasy',
+      paras: [
+        `${team} visited a garden inside a space station. Rows of green plants grew beneath bright lamps. But one row had drooping leaves. A small robot rolled over with a watering can. “I gave every row the same amount of water,” it said. The explorers decided to find out what was different.`,
+        `${lead} checked the soil. It was damp in every row. Then the explorers looked up. The lamp above the drooping plants was dark. A loose plug hung beside the shelf. The robot had checked the water but had forgotten to check the light. Plants needed both to grow.`,
+        `The station gardener safely reconnected the lamp. ${team} made a checklist with pictures of water and light. The next morning, the leaves looked stronger. The robot checked each picture before moving to the next row. The explorers had helped by comparing the plants and checking more than one possible cause.`
+      ], detail: ['What was different above the drooping plants?', ['A window was open', 'The lamp was dark', 'A bird was sleeping'], 1, 1, 'The explorers notice that the lamp above those plants is dark.'],
+      inference: ['Why was more water unlikely to solve the problem?', ['The soil was already damp', 'The plants were made of paper', 'The robot had no watering can'], 0, 1, 'Every row has damp soil, but one row is missing light.'],
+      sequence: ['What did the explorers make after the lamp was reconnected?', ['A new space station', 'A bowl of soup', 'A checklist with pictures of water and light'], 2, 2, 'After the gardener reconnects the lamp, the explorers make a checklist.'],
+      idea: 'Checking different possible causes can help solve a problem', choices: ['Design a plant-checking robot', 'Plan another space garden'], endings: [`${team} sketched a robot with a light sensor. What else should it check? Explain your drawing.`, `${team} planned a new garden. Draw where the water and lamps should go, and explain why plants need both.`] },
+    mystery: { title: 'the missing library book', icon: '🔎', theme: 'Mystery',
+      paras: [
+        `${team} went to the library to find a book about sea turtles. Its place on the shelf was empty. A blue bookmark lay on the floor. “I saw that bookmark this morning,” the librarian said. “We used it during story time.” The explorers wondered where story time had taken place.`,
+        `${lead} looked near the reading rug. There were soft cushions and a low table. On the table stood a stack of books. A picture of a green flipper peeked from the middle of the stack. Instead of searching every shelf, the explorers carefully checked the books near the rug.`,
+        `The sea turtle book was in the stack. The librarian had set it there after reading aloud. ${team} returned it to the right shelf, then made a small sign for books waiting to be put away. Following the bookmark clue had solved the mystery. Now the library had a clearer place for its returned books.`
+      ], detail: ['What clue was on the floor?', ['A red feather', 'A blue bookmark', 'A silver key'], 1, 0, 'The first paragraph describes a blue bookmark on the floor.'],
+      inference: ['Why did the explorers search near the reading rug?', ['The bookmark had been used during story time', 'Sea turtles live under rugs', 'All the shelves were locked'], 0, 0, 'The librarian connects the bookmark with story time, giving the explorers a place to investigate.'],
+      sequence: ['What happened after the book was found?', ['The explorers hid the bookmark', 'The librarian closed the library', 'The book went back on its shelf and the explorers made a sign'], 2, 2, 'They return the book, then make a sign for books waiting to be put away.'],
+      idea: 'Following a clue can solve a mystery and improve a shared space', choices: ['Design a return-books sign', 'Invent the next library mystery'], endings: [`${team} designed a sign with a bright picture. What would make it easy for younger readers to understand?`, `${team} noticed a trail of paper stars. Where could the stars lead? Tell someone the first clue in your new mystery.`] }
+  };
+  const setting = settings[theme];
+  if (!setting) throw Error('Choose a supported story theme.');
+  const question = (skill, parts) => [skill, ...parts];
+  return { id: `personal-${theme}`, title: `${team} and ${setting.title}`, theme: setting.theme, icon: setting.icon, paras: setting.paras,
+    qs: [question('Details', setting.detail), question('Inference', setting.inference), question('Sequence', setting.sequence),
+      ['Main idea', 'Which lesson best fits this story?', ['Always rush past clues', setting.idea, 'Never ask for help'], 1, 2, `The explorers show that ${setting.idea.toLowerCase()}.`]],
+    choice: 'Where should your imagination go next?', options: setting.choices, endings: setting.endings };
+};
+stories.personalized = id => typeof id === 'string' && ['forest', 'space', 'mystery'].some(theme => id === `personal-${theme}`) ? stories.generate([], id.slice(9)) : null;
+
 if (typeof module !== 'undefined') module.exports = stories;

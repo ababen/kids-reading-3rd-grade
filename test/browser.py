@@ -13,11 +13,22 @@ def route(r):
   if fail:
    r.fulfill(status=503,json={'error':'Offline'});return
   key=r.request.headers.get('authorization','')
-  d=families.setdefault(key,{'names':['Reader 1','Reader 2'],'records':[[],[]]})
+  d=families.setdefault(key,{'names':['Reader 1','Reader 2'],'records':[[],[]],'readerIds':[0,1],'deletedReaders':[]})
   ops=(r.request.post_data_json or {}).get('operations',[]) if r.request.method=='POST' else []
   requests.extend(ops)
   for op in ops:
-   who=op['reader']
+   reader=op['reader']
+   if op['type']=='delete-reader':
+    if reader not in d['deletedReaders']:d['deletedReaders'].append(reader)
+    if reader in d['readerIds']:
+     i=d['readerIds'].index(reader)
+     for field in ['readerIds','names','records']:d[field].pop(i)
+    continue
+   if reader in d['deletedReaders']:continue
+   if op['type']=='add-reader' and reader not in d['readerIds']:
+    d['readerIds'].append(reader);d['names'].append(op['name']);d['records'].append([])
+   if reader not in d['readerIds']:continue
+   who=d['readerIds'].index(reader)
    if op['type']=='name':d['names'][who]=op['name']
    if op['type']=='result' and not any(x['uid']==op['record']['uid'] for x in d['records'][who]):d['records'][who].append(op['record'])
    if op['type']=='reset':d['records'][who]=[x for x in d['records'][who] if x['uid'] not in op['ids']]
@@ -63,6 +74,58 @@ with sync_playwright() as p:
  p2.evaluate('cloud.sync()');p2.wait_for_function("data.names[0]==='Avery Offline'")
  p2.locator('#reset').click();p2.wait_for_function('cloud.state.pending.length===0')
  page.evaluate('cloud.sync()');page.wait_for_function('data.records[0].length===0')
+ # Variable-size families: add a third kid, personalize a story, and retain results.
+ page.locator('#parent').click()
+ page.locator('#kid-name').fill('Sam <spark>');page.locator('#add-kid button').click()
+ page.wait_for_function('cloud.state.pending.length===0 && data.names.length===3')
+ new_id=page.evaluate('data.readerIds[who]')
+ page.reload();assert page.evaluate('data.names.length')==3
+ page.locator('#home').click();page.locator('[data-reader="2"]').click();page.locator('#personalize').click()
+ for checkbox in page.locator('[name="cast"]').all():checkbox.uncheck()
+ page.locator('#story-builder button').click()
+ assert page.locator('#builder-error').inner_text()=='Choose at least one kid for your story.'
+ for checkbox in page.locator('[name="cast"]').all():checkbox.check()
+ page.locator('#story-theme').select_option('mystery')
+ page.locator('#story-builder button').click()
+ assert 'Sam <spark>' in page.locator('h1').inner_text()
+ assert page.locator('spark').count()==0
+ assert 'Sam <spark>' in page.locator('.story').inner_text()
+ page.locator('#check').click()
+ for i in range(4):
+  answer=page.evaluate('active.qs[qi][3]')
+  page.locator(f'[data-answer="{answer}"]').click();page.locator('#next').click()
+ page.wait_for_function('cloud.state.pending.length===0')
+ assert page.evaluate('data.records[who][0].id')=='personal-mystery'
+ page.locator('[data-ending]').first.click()
+ assert 'Sam <spark>' in page.locator('#ending').inner_text()
+ p2.evaluate('cloud.sync()');p2.wait_for_function('data.names.length===3')
+ assert p2.evaluate('data.readerIds.includes('+json.dumps(new_id)+')')
+ # Cancel deletion first, then delete a sibling without moving the new kid's progress.
+ page.locator('#parent').click()
+ def dismiss_delete(dialog):dialog.dismiss()
+ page.on('dialog',dismiss_delete)
+ page.locator('[data-delete="0"]').click()
+ assert page.evaluate('data.names.length')==3
+ # Replace the dismiss handler for subsequent confirmed deletions.
+ page.remove_listener('dialog',dismiss_delete)
+ page.on('dialog',lambda dialog:dialog.accept())
+ page.locator('[data-delete="0"]').click()
+ page.wait_for_function('cloud.state.pending.length===0 && data.names.length===2')
+ assert page.evaluate('data.readerIds[who]')==new_id
+ assert page.evaluate('data.records[who][0].id')=='personal-mystery'
+ page.reload();assert page.evaluate('data.names.length')==2
+ p2.evaluate('cloud.sync()');p2.wait_for_function('data.names.length===2')
+ # Delete every remaining kid and recover from the empty family state.
+ page.locator('#parent').click()
+ while page.evaluate('data.names.length'):
+  page.locator('[data-delete="0"]').click()
+  page.wait_for_function('cloud.state.pending.length===0')
+ assert page.locator('h2',has_text='Ready for a new reader').is_visible()
+ page.reload();assert page.locator('#add-kid').is_visible()
+ page.locator('#kid-name').fill('New explorer');page.locator('#add-kid button').click()
+ page.wait_for_function('cloud.state.pending.length===0 && data.names.length===1')
+ assert page.evaluate('data.records[0].length')==0
+ assert 'Built by Marketing Bull' in page.locator('footer').inner_text()
  assert not errors,errors
- print('Browser QA passed: rename, cloud enable, completion/hints, reload, second-device restore, offline queue/retry, cross-device reset; no JavaScript errors.')
+ print('Browser QA passed: rename, cloud enable, completion/hints, reload, second-device restore, offline queue/retry, cross-device reset, add/delete kids, personalized story and questions, HTML-safe names, deletion cancellation, sibling progress isolation, empty-family recovery, footer; no JavaScript errors.')
  b.close()

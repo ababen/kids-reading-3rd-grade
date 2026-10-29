@@ -1,7 +1,7 @@
 const { createHash } = require('node:crypto');
 const stories = require('../stories.js');
 
-const blank = () => ({ names: ['Reader 1', 'Reader 2'], records: [[], []] });
+const blank = () => ({ names: ['Reader 1', 'Reader 2'], records: [[], []], readerIds: [0, 1], deletedReaders: [] });
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 // One atomic update: duplicate uploads are harmless, and a reset's tombstones
@@ -12,7 +12,20 @@ if count == 1 then redis.call('EXPIRE', KEYS[2], 60) end
 if count > 120 then return {'RATE_LIMIT'} end
 local ops = cjson.decode(ARGV[1])
 for _, op in ipairs(ops) do
-  if op.type == 'name' then
+  if op.type == 'delete-reader' then
+    redis.call('HSET', KEYS[1], 'removed:' .. op.reader, '1')
+    redis.call('HDEL', KEYS[1], 'name:' .. op.reader)
+    local fields = redis.call('HGETALL', KEYS[1])
+    for i = 1, #fields, 2 do
+      if string.sub(fields[i], 1, 7) == 'record:' and tostring(cjson.decode(fields[i + 1]).reader) == tostring(op.reader) then
+        redis.call('HDEL', KEYS[1], fields[i])
+      end
+    end
+  elseif redis.call('HEXISTS', KEYS[1], 'removed:' .. op.reader) == 1 then
+    -- A deleted reader cannot be restored by an offline device.
+  elseif op.type == 'add-reader' then
+    redis.call('HSETNX', KEYS[1], 'name:' .. op.reader, op.name)
+  elseif op.type == 'name' then
     redis.call('HSET', KEYS[1], 'name:' .. op.reader, op.name)
   elseif op.type == 'result' then
     local id = op.record.uid
@@ -35,22 +48,23 @@ return redis.call('HGETALL', KEYS[1])
 function validate(ops) {
   if (!Array.isArray(ops) || ops.length > 50) throw Error('Send up to 50 operations.');
   return ops.map(op => {
-    if (!op || ![0, 1].includes(op.reader)) throw Error('Invalid reader.');
+    if (!op || !([0, 1].includes(op.reader) || (typeof op.reader === 'string' && uuid.test(op.reader)))) throw Error('Invalid reader.');
     const { type, reader } = op;
-    if (type === 'name' && typeof op.name === 'string' && op.name.trim().length > 0 && op.name.trim().length <= 24) {
+    if (type === 'delete-reader') return { type, reader };
+    if (['name', 'add-reader'].includes(type) && typeof op.name === 'string' && op.name.trim().length > 0 && op.name.trim().length <= 24) {
       return { type, reader, name: op.name.trim() };
     }
     if (type === 'reset' && Array.isArray(op.ids) && op.ids.length <= 500 && op.ids.every(id => typeof id === 'string' && uuid.test(id))) {
       return { type, reader, ids: op.ids };
     }
     if (type !== 'result' || !op.record) throw Error('Invalid operation.');
-    const r = op.record, story = stories.find(s => s.id === r.id);
+    const r = op.record, story = stories.find(s => s.id === r.id) || stories.personalized(r.id);
     if (!uuid.test(r.uid) || !story || typeof r.date !== 'string' || !Number.isFinite(Date.parse(r.date)) || !Array.isArray(r.answers) || r.answers.length !== 4) throw Error('Invalid result.');
     const answers = r.answers.map((a, i) => {
       if (!a || a.skill !== story.qs[i][0] || !Number.isInteger(a.attempts) || a.attempts < 1 || a.attempts > 3 || typeof a.help !== 'boolean' || a.first !== (a.attempts === 1 && !a.help) || (a.attempts > 1 && !a.help)) throw Error('Invalid answer.');
       return { skill: a.skill, attempts: a.attempts, help: a.help, first: a.first };
     });
-    return { type, reader, record: { uid: r.uid, id: r.id, date: new Date(r.date).toISOString(), answers } };
+    return { type, reader, record: { uid: r.uid, id: r.id, date: new Date(r.date).toISOString(), answers, ...(typeof r.title === 'string' && r.title.length <= 160 ? { title: r.title } : {}) } };
   });
 }
 
@@ -95,14 +109,30 @@ async function handler(req, res) {
       res.setHeader('Retry-After', '60');
       return res.status(429).json({ error: 'Please try again in a minute.' });
     }
-    const data = blank();
-    for (let i = 0; i < reply.result.length; i += 2) {
-      const field = reply.result[i], value = reply.result[i + 1];
-      if (field === 'name:0' || field === 'name:1') data.names[Number(field.slice(-1))] = value;
-      if (field.startsWith('record:')) {
-        const op = JSON.parse(value);
-        data.records[op.reader].push(op.record);
-      }
+    const data = blank(), fields = new Map();
+    for (let i = 0; i < reply.result.length; i += 2) fields.set(reply.result[i], reply.result[i + 1]);
+    const readerKey = value => /^[01]$/.test(value) ? Number(value) : value;
+    for (const [field] of fields) {
+      if (field.startsWith('removed:')) data.deletedReaders.push(readerKey(field.slice(8)));
+    }
+    for (const [field, value] of fields) {
+      if (!field.startsWith('name:')) continue;
+      const reader = readerKey(field.slice(5));
+      if (data.deletedReaders.includes(reader)) continue;
+      let index = data.readerIds.indexOf(reader);
+      if (index === -1) {
+        index = data.readerIds.length;
+        data.readerIds.push(reader); data.names.push(value); data.records.push([]);
+      } else data.names[index] = value;
+    }
+    // UUID ordering makes concurrent additions consistent on every device.
+    const ids = data.readerIds.filter(id => !data.deletedReaders.includes(id)).sort((a, b) => String(a).localeCompare(String(b)));
+    const profiles = ids.map(id => ({ id, name: data.names[data.readerIds.indexOf(id)] }));
+    data.readerIds = ids; data.names = profiles.map(p => p.name); data.records = ids.map(() => []);
+    for (const [field, value] of fields) {
+      if (!field.startsWith('record:')) continue;
+      const op = JSON.parse(value), index = data.readerIds.indexOf(op.reader);
+      if (index !== -1) data.records[index].push(op.record);
     }
     data.records.forEach(records => records.sort((a, b) => a.date.localeCompare(b.date) || a.uid.localeCompare(b.uid)));
     return res.status(200).json({ data });

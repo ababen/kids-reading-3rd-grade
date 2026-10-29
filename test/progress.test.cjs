@@ -113,3 +113,70 @@ test('connecting another family fails safely while local edits are pending', asy
   await assert.rejects(c.connect('b'.repeat(64)), /Finish syncing/);
   assert.equal(c.state.key, 'a'.repeat(64));
 });
+
+test('reader additions and deletions keep progress tied to stable identities', () => {
+  const c = client(), third = randomUUID(), fourth = randomUUID();
+  c.apply(c.state.data, { type: 'add-reader', reader: third, name: 'Avery' });
+  c.apply(c.state.data, { type: 'add-reader', reader: fourth, name: 'Sam' });
+  const op = result(); op.reader = third;
+  c.apply(c.state.data, op);
+  c.apply(c.state.data, { type: 'delete-reader', reader: 0 });
+  assert.deepEqual(c.state.data.readerIds, [1, third, fourth]);
+  assert.equal(c.state.data.records[1][0].uid, op.record.uid);
+  c.apply(c.state.data, { type: 'name', reader: third, name: 'Avery New' });
+  assert.equal(c.state.data.names[1], 'Avery New');
+  c.apply(c.state.data, { type: 'delete-reader', reader: third });
+  c.apply(c.state.data, op);
+  c.apply(c.state.data, { type: 'add-reader', reader: third, name: 'Stale device' });
+  assert.deepEqual(c.state.data.names, ['Reader 2', 'Sam']);
+  assert.ok(c.state.data.records.every(records => !records.length));
+});
+
+test('pending edits cannot revive a deleted reader after a sync response', async () => {
+  const c = client(), op = result(); let calls = 0;
+  c.state.pending.push({ type: 'name', reader: 1, name: 'Renamed' });
+  c.request = async () => {
+    const remote = { names: ['Reader 2'], records: [[]], readerIds: [1], deletedReaders: [0] };
+    if (++calls === 1) c.state.pending.push(op);
+    return remote;
+  };
+  await c.sync();
+  assert.deepEqual(c.state.data.readerIds, [1]);
+  assert.deepEqual(c.state.data.records, [[]]);
+  assert.equal(c.state.pending.length, 0);
+});
+
+test('API restores variable-sized families and ignores records for deleted kids', async () => {
+  configured(); const reader = randomUUID(), op = result(); op.reader = reader;
+  global.fetch = async () => ({ ok: true, json: async () => ({ result: [
+    'removed:0', '1', `name:${reader}`, 'Avery', `record:${op.record.uid}`, JSON.stringify(op),
+    'record:legacy', JSON.stringify(result())
+  ] }) });
+  const response = await call();
+  assert.equal(response.code, 200);
+  assert.deepEqual(response.body.data.readerIds, [1, reader]);
+  assert.deepEqual(response.body.data.names, ['Reader 2', 'Avery']);
+  assert.equal(response.body.data.records[1][0].uid, op.record.uid);
+  assert.deepEqual(response.body.data.deletedReaders, [0]);
+  global.fetch = async () => ({ ok: true, json: async () => ({ result: ['removed:0', '1', 'removed:1', '1'] }) });
+  assert.deepEqual((await call()).body.data.names, []);
+});
+
+test('API validates new profile operations and personalized story results', () => {
+  const reader = randomUUID();
+  assert.deepEqual(handler.validate([{ type: 'add-reader', reader, name: ' Avery ' }, { type: 'delete-reader', reader }]),
+    [{ type: 'add-reader', reader, name: 'Avery' }, { type: 'delete-reader', reader }]);
+  for (const bad of [{ type: 'add-reader', reader, name: ' ' }, { type: 'add-reader', reader: '__proto__', name: 'Avery' }, { type: 'delete-reader', reader: 2 }]) {
+    assert.throws(() => handler.validate([bad]));
+  }
+  for (const theme of ['forest', 'space', 'mystery']) {
+    const story = stories.generate(['Avery', 'Sam'], theme), op = result();
+    op.reader = reader; op.record.id = story.id; op.record.title = story.title;
+    op.record.answers = story.qs.map(q => ({ skill: q[0], first: true, attempts: 1, help: false }));
+    assert.equal(handler.validate([op])[0].record.title, story.title);
+    assert.ok(story.paras.join(' ').includes('Avery and Sam'));
+    assert.equal(story.qs.length, 4);
+    story.qs.forEach(q => { assert.ok(story.paras[q[4]]); assert.ok(q[2][q[3]]); });
+  }
+  assert.equal(stories.personalized('personal-unknown'), null);
+});
