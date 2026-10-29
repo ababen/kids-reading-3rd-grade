@@ -1,7 +1,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const handler = require('../api/progress.js');
-const files = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/cloud.js': 'cloud.js', '/stories.js': 'stories.js', '/style.css': 'style.css' };
+const files = { '/': 'index.html', '/index.html': 'index.html', '/app.js': 'app.js', '/cloud.js': 'cloud.js', '/stories.js': 'stories.js', '/style.css': 'style.css', '/analytics.js': 'analytics.js', '/node_modules/@vercel/analytics/dist/index.mjs': 'node_modules/@vercel/analytics/dist/index.mjs' };
 http.createServer(async (req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
   if (path === '/api/progress') {
@@ -17,6 +17,6 @@ http.createServer(async (req, res) => {
     return handler(req, res);
   }
   if (!files[path]) { res.writeHead(404).end('Not found'); return; }
-  res.setHeader('Content-Type', path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : 'text/html');
+  res.setHeader('Content-Type', (path.endsWith('.js') || path.endsWith('.mjs')) ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : 'text/html');
   res.end(fs.readFileSync(require('node:path').join(__dirname, '..', files[path])));
 }).listen(8000, '127.0.0.1', () => console.log('Story Spark: http://localhost:8000'));

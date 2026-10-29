@@ -9,6 +9,8 @@ requests=[]
 def route(r):
  global fail
  path=urlparse(r.request.url).path
+ if path=='/_vercel/insights/script.js':
+  r.fulfill(body='window.analyticsLoaded = true;',content_type='text/javascript');return
  if path=='/api/progress':
   if fail:
    r.fulfill(status=503,json={'error':'Offline'});return
@@ -35,12 +37,13 @@ def route(r):
   r.fulfill(json={'data':d});return
  file=root/('index.html' if path=='/' else path.lstrip('/'))
  if not file.is_file():r.fulfill(status=404);return
- r.fulfill(path=str(file),content_type='text/javascript' if file.suffix=='.js' else 'text/css' if file.suffix=='.css' else 'text/html')
+ r.fulfill(path=str(file),content_type='text/javascript' if file.suffix in ['.js','.mjs'] else 'text/css' if file.suffix=='.css' else 'text/html')
 with sync_playwright() as p:
  b=p.chromium.launch(executable_path='/usr/bin/chromium',headless=True,args=['--no-sandbox'])
  ctx=b.new_context();ctx.route('**/*',route)
  page=ctx.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
  page.goto('https://story-spark.test/')
+ page.wait_for_function('window.analyticsLoaded === true')
  page.locator('#parent').click()
  page.locator('#readername').fill('Avery');page.locator('#rename button').click()
  page.locator('#enable-sync').click()
