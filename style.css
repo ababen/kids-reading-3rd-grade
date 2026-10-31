@@ -13,3 +13,17 @@ input{color:var(--ink)}
 input,select{font:inherit;max-width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;background:white;color:var(--ink)}input:focus-visible{outline:3px solid var(--focus);outline-offset:3px}.kid-list{display:grid;gap:12px;margin-top:20px}.kid-list .row{justify-content:space-between;border-top:1px solid var(--line);padding-top:12px}.kid-list span{overflow-wrap:anywhere;min-width:0;flex:1}.kid-list button{color:#8b3b35}fieldset{border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:22px}.cast-choice{display:flex;align-items:center;gap:10px;padding:8px;overflow-wrap:anywhere}.cast-choice input{width:20px;height:20px;flex-shrink:0}#story-theme{display:block;width:100%;margin-top:10px}.hero button{margin:6px 0}.reader h1,.reader h2,.profiles button{overflow-wrap:anywhere}
 
 footer a{color:inherit;text-underline-offset:3px}footer a:hover{color:var(--green)}
+
+/* Keep the name picker and its pencil as separate, keyboard-accessible buttons. */
+.reader-profile{display:inline-flex;align-items:stretch;max-width:100%}
+.reader-profile [data-reader]{min-width:0;border-radius:14px 0 0 14px}
+.profiles .edit-name{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;min-width:44px;min-height:44px;padding:10px;color:var(--profile-accent);border-color:var(--profile-accent);border-left:0;border-radius:0 14px 14px 0}
+.reader-profile [data-reader].selected+.edit-name{background:var(--profile-soft)}
+.rename-notice{margin:-12px 0 24px;color:var(--green)}
+.name-dialog{width:min(420px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid var(--line);border-radius:24px;background:var(--cream);color:var(--ink);padding:28px;box-shadow:0 20px 70px #0003}
+.name-dialog::backdrop{background:#18232080}
+.name-dialog form{display:grid;gap:14px}
+.name-dialog h2,.name-dialog p{margin:0}
+.name-dialog input{width:100%;min-width:0;font-size:18px}
+.name-dialog .muted{font-size:14px}
+.name-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;margin-top:8px}
